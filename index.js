@@ -27,27 +27,34 @@ const client = new MongoClient(uri, {
   },
 });
 
-const verifyClerkToken = async (req, res, next) => {
-  try {
-    const data = getAuth(req);
-    if (!data.isAuthenticated) {
-      res.status(401).json({ error: "Unauthorized" });
-    }
-    console.log(data);
-    req.user = data;
-    next();
-  } catch (err) {
-    console.error(err);
-    res.status(401).json({ error: "Unauthorized" });
-  }
-};
-
 async function run() {
   try {
     await client.connect();
     const db = client.db("bloodlagbe_db");
     const usersCollection = db.collection("users");
 
+    app.get("/blood-groups", async (req, res) => {
+      const result = await usersCollection
+        .find(
+          {},
+          {
+            projection: {
+              _id: 0,
+              email: 0,
+              bio: 0,
+              social_links: 0,
+              createdAt: 0,
+            },
+          }
+        )
+        .toArray();
+
+      if (result) {
+        res.status(200).json(result);
+      } else {
+        return res.status(404).json({ error: "User not found." });
+      }
+    });
     app.get("/me", async (req, res) => {
       const data = getAuth(req);
       if (!data.isAuthenticated) {
@@ -102,6 +109,9 @@ async function run() {
           };
         }
 
+        delete updateData.email;
+        delete updateData.clerkId;
+        delete updateData.createdAt;
         const result = await usersCollection.updateOne(
           { email: email },
           { $set: updateData }
@@ -111,7 +121,7 @@ async function run() {
           return res.status(404).json({ error: "User not found." });
         }
 
-        res.status(200).json({ success: true, updatedFields: updateData });
+        res.status(200).json({ success: true });
       } catch (err) {
         console.error(err);
         res.status(400).json({ error: err.message });
