@@ -49,8 +49,19 @@ async function run() {
       const filterGroup = decodeURIComponent(
         req.query?.group || ""
       ).toUpperCase();
+      const filterLocation = req.query?.search || "".toLowerCase();
 
-      const query = filterGroup ? { blood_group: filterGroup } : {};
+      const query = {};
+
+      if (filterGroup) {
+        query.blood_group = filterGroup;
+      }
+
+      if (filterLocation) {
+        query.location = { $regex: filterLocation, $options: "i" };
+      }
+
+      console.log(query);
 
       const result = await usersCollection
         .find(query, {
