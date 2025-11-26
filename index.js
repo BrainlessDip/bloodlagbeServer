@@ -32,6 +32,7 @@ async function run() {
     // await client.connect();
     const db = client.db("bloodlagbe_db");
     const usersCollection = db.collection("users");
+    const postsCollection = db.collection("posts");
 
     app.get("/blood-groups", async (req, res) => {
       const result = await usersCollection
@@ -55,6 +56,47 @@ async function run() {
         return res.status(404).json({ error: "User not found." });
       }
     });
+
+    app.get("/posts/:userId", async (req, res) => {
+      const userId = req.params.userId;
+      const result = await postsCollection
+        .find({ clerkId: userId }, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      if (result) {
+        res.status(200).json(result);
+      } else {
+        return res.status(404).json({ error: "User not found." });
+      }
+    });
+
+    app.get("/profile/:userId", async (req, res) => {
+      const userId = req.params.userId;
+      const result = await usersCollection.findOne(
+        { clerkId: userId },
+        { projection: { _id: 0 } }
+      );
+
+      if (result) {
+        const clerkUser = await clerkClient.users.getUser(userId);
+        const userPosts = await postsCollection
+          .find({ clerkId: userId }, { projection: { _id: 0 } })
+          .toArray();
+        const mergedData = {
+          ...result,
+          has_image: clerkUser.hasImage,
+          imageUrl: clerkUser.imageUrl,
+          last_sign_in_at: new Date(clerkUser.lastActiveAt).toISOString(),
+          last_active_at: new Date(clerkUser.lastActiveAt).toISOString(),
+          posts: userPosts,
+        };
+        res.status(200).json(mergedData);
+      } else {
+        return res.status(404).json({ error: "User not found." });
+      }
+    });
+
     app.get("/me", async (req, res) => {
       const data = getAuth(req);
       if (!data.isAuthenticated) {
@@ -69,6 +111,52 @@ async function run() {
         res.status(200).json(result);
       } else {
         return res.status(404).json({ error: "User not found." });
+      }
+    });
+
+    app.get("/me/posts", async (req, res) => {
+      const data = getAuth(req);
+      if (!data.isAuthenticated) {
+        res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = await postsCollection
+        .find({ email: data.sessionClaims.email }, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      if (result) {
+        res.status(200).json(result);
+      } else {
+        return res.status(404).json({ error: "User not found." });
+      }
+    });
+
+    app.post("/posts", async (req, res) => {
+      try {
+        const data = getAuth(req);
+        if (!data.isAuthenticated) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const postData = {
+          content: req.body.content,
+          email: data.sessionClaims.email,
+          clerkId: data.sessionClaims.userId,
+          createdAt: new Date(),
+          likes: 0,
+        };
+
+        const result = await postsCollection.insertOne(postData);
+
+        if (result.insertedId) {
+          res
+            .status(201)
+            .json({ message: "Post created", id: result.insertedId });
+        } else {
+          res.status(500).json({ error: "Failed to create post" });
+        }
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
       }
     });
 
@@ -147,7 +235,7 @@ async function run() {
               phone_number: "",
               bio: "",
               total_donation: 0,
-              last_donation: null,
+              last_donation: "",
               social_links: {
                 facebook: "",
                 telegram: "",
