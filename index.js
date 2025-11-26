@@ -27,6 +27,17 @@ const client = new MongoClient(uri, {
   },
 });
 
+const bloodGroups = [
+  { label: "A+", value: "a-plus" },
+  { label: "A-", value: "a-minus" },
+  { label: "B+", value: "b-plus" },
+  { label: "B-", value: "b-minus" },
+  { label: "O+", value: "o-plus" },
+  { label: "O-", value: "o-minus" },
+  { label: "AB+", value: "ab-plus" },
+  { label: "AB-", value: "ab-minus" },
+];
+
 async function run() {
   try {
     // await client.connect();
@@ -35,33 +46,22 @@ async function run() {
     const postsCollection = db.collection("posts");
 
     app.get("/blood-groups", async (req, res) => {
+      const filterGroup = decodeURIComponent(
+        req.query?.group || ""
+      ).toUpperCase();
+
+      const query = filterGroup ? { blood_group: filterGroup } : {};
+
       const result = await usersCollection
-        .find(
-          {},
-          {
-            projection: {
-              _id: 0,
-              email: 0,
-              bio: 0,
-              social_links: 0,
-              createdAt: 0,
-            },
-          }
-        )
-        .toArray();
-
-      if (result) {
-        res.status(200).json(result);
-      } else {
-        return res.status(404).json({ error: "User not found." });
-      }
-    });
-
-    app.get("/posts/:userId", async (req, res) => {
-      const userId = req.params.userId;
-      const result = await postsCollection
-        .find({ clerkId: userId }, { projection: { _id: 0 } })
-        .sort({ createdAt: -1 })
+        .find(query, {
+          projection: {
+            _id: 0,
+            email: 0,
+            bio: 0,
+            social_links: 0,
+            createdAt: 0,
+          },
+        })
         .toArray();
 
       if (result) {
@@ -82,6 +82,7 @@ async function run() {
         const clerkUser = await clerkClient.users.getUser(userId);
         const userPosts = await postsCollection
           .find({ clerkId: userId }, { projection: { _id: 0 } })
+          .sort({ createdAt: -1 })
           .toArray();
         const mergedData = {
           ...result,
@@ -140,6 +141,8 @@ async function run() {
         const postData = {
           content: req.body.content,
           email: data.sessionClaims.email,
+          first_name: data.sessionClaims.first_name,
+          last_name: data.sessionClaims.last_name,
           clerkId: data.sessionClaims.userId,
           createdAt: new Date(),
           likes: 0,
@@ -154,6 +157,21 @@ async function run() {
         } else {
           res.status(500).json({ error: "Failed to create post" });
         }
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+      }
+    });
+
+    app.get("/posts", async (req, res) => {
+      try {
+        const result = await postsCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .limit(8)
+          .toArray();
+
+        res.status(200).json(result);
       } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Server error" });
